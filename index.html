@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Leitor Faturas</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    </head>
+    <body>
+        <input type="file" id="pdfFileInput" accept=".pdf" />
+        <div id="output"></div>
+        <canvas id="pieChart" width="200" height="200"></canvas>
+        <h1 id="resultContainer"></h1>
+        <script src="script.js"></script>
+    </body>
+</html>
+<style>
+    body {
+        background-color: #8a05be;
+        color: aliceblue;
+    }
+</style>
