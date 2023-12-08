@@ -1,9 +1,8 @@
-document
-    .getElementById('pdfFileInput')
-    .addEventListener('change', handleFileSelect)
+document.getElementById('pdfFileInput').addEventListener('change', handleFileSelect)
 
 const TRANSACTIONS_PAGE_NUMBER = 4
-const extractedData = []
+const transactionPattern = /(\d{2} [A-Z]{3}[\s\S]+?)\s+(\d+,\d{2})/g
+let extractedData = []
 let totalValue = 0
 
 function handleFileSelect(event) {
@@ -12,78 +11,75 @@ function handleFileSelect(event) {
 
     const reader = new FileReader()
 
-    reader.onload = function (e) {
+    reader.onload = async function (e) {
         const pdfData = new Uint8Array(e.target.result)
-        extractTextFromPDF(pdfData)
+        await extractTextFromPDF(pdfData)
     }
 
     reader.readAsArrayBuffer(file)
+}
+
+async function extractTextFromPDF(pdfData) {
+    const pdf = await pdfjsLib.getDocument(pdfData).promise
+
+    for (let pageNumber = TRANSACTIONS_PAGE_NUMBER; pageNumber <= pdf.numPages; pageNumber++) {
+        const page = await pdf.getPage(pageNumber)
+        const textContent = await page.getTextContent()
+
+        if (textContent.items[0].str === 'TRANSAÇÕES') {
+            textContent.items.splice(0, 5)
+            const text = textContent.items.map((item) => item.str).join(' ')
+
+            let match
+            while ((match = transactionPattern.exec(text)) !== null) {
+                const [, transactionInfo, value] = match
+                const lines = transactionInfo.trim().split(/\n/)
+
+                for (const line of lines) {
+                    const [, date, name] = line.match(/^(\d{2} [A-Z]{3})\s+([\s\S]+?)$/)
+                    const numericValue = parseFloat(value.replace('.', '').replace(',', '.'))
+                    totalValue += numericValue
+
+                    const edFoundSameTransaction = extractedData.find((ed) =>
+                        compareWords(ed.name, name),
+                    )
+                    if (edFoundSameTransaction) {
+                        edFoundSameTransaction.value += numericValue
+                    } else {
+                        extractedData.push({ date, name, value: numericValue })
+                    }
+                }
+            }
+        }
+    }
+
+    console.log(JSON.parse(JSON.stringify(extractedData)))
+    document.getElementById('resultContainer').innerHTML = 'Total Fatura: ' + totalValue.toFixed(2)
     drawPieChart()
 }
 
-function extractTextFromPDF(pdfData) {
-    const transactionPattern = /(\d{2} [A-Z]{3}[\s\S]+?)\s+(\d+,\d{2})/g
-    pdfjsLib.getDocument(pdfData).promise.then(function (pdf) {
-        for (
-            let pageNumber = TRANSACTIONS_PAGE_NUMBER;
-            pageNumber <= pdf.numPages;
-            pageNumber++
-        ) {
-            pdf.getPage(pageNumber).then(function (page) {
-                page.getTextContent().then(function (textContent) {
-                    const tituloPagina = textContent.items[0].str
-                    if (tituloPagina === 'TRANSAÇÕES') {
-                        textContent.items.splice(0, 5)
-                        const pageText = textContent.items
-                            .map((item) => item.str)
-                            .join(' ')
+function compareWords(str1, str2) {
+    // Remove non-alphanumeric characters and split the strings into arrays of words
+    const words1 = str1.replace(/[^a-zA-Z0-9\s]/g, '').split(/\s+/)
+    const words2 = str2.replace(/[^a-zA-Z0-9\s]/g, '').split(/\s+/)
 
-                        let match
-                        while (
-                            (match = transactionPattern.exec(pageText)) !== null
-                        ) {
-                            const [, transactionInfo, value] = match
-                            const lines = transactionInfo.trim().split(/\n/)
-                            for (const line of lines) {
-                                const [, date, name] = line.match(
-                                    /^(\d{2} [A-Z]{3})\s+([\s\S]+?)$/,
-                                )
-                                const numericValue = parseFloat(
-                                    value.replace('.', '').replace(',', '.'),
-                                )
-                                totalValue += numericValue
+    // Convert arrays to sets for efficient intersection check
+    const set1 = new Set(words1)
+    const set2 = new Set(words2)
 
-                                const regex = new RegExp(name)
-                                const edFoundSameTransaction =
-                                    extractedData.find((ed) => {
-                                        return regex.test(ed.name)
-                                    })
-                                if (edFoundSameTransaction) {
-                                    edFoundSameTransaction.value += numericValue
-                                } else {
-                                    extractedData.push({
-                                        date,
-                                        name,
-                                        value: numericValue,
-                                    })
-                                }
-                            }
-                        }
-                    }
-                })
-            })
-        }
-    })
+    // Find the intersection of the two sets
+    const intersection = [...set1].filter((word) => set2.has(word))
+
+    // Check if there is at least one common word
+    return intersection.length > 0
 }
 
 function drawPieChart() {
-    document.getElementById('resultContainer').innerHTML =
-        'Total Fatura: ' + totalValue
     const ctx = document.getElementById('pieChart').getContext('2d')
     const labels = extractedData.map((ed) => ed.name)
     const data = extractedData.map((ed) => ed.value)
-    const pieChart = new Chart(ctx, {
-        type: 'pie',
+    new Chart(ctx, {
+        type: 'doughnut',
         data: {
             labels: labels,
             datasets: [
@@ -94,7 +90,7 @@ function drawPieChart() {
             ],
         },
         options: {
-            responsive: true,
+            responsive: false,
             maintainAspectRatio: false,
         },
     })
